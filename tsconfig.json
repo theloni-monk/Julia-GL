@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "target": "es6",                          
+    "module": "commonjs",                    
+    "lib": ["dom","ESNext"],                     
+    "allowJs": true,
+    "outDir": "build",                          
+    "rootDir": "src",
+    "strict": true,         
+    "noImplicitAny": true,
+    "resolveJsonModule": true,
+    "typeRoots" : ["./node_modules/@types"],
+  },
+  "include": [
+    "src/**/*"
+  ],
+  "exclude" : [
+    "src/**/*.spec.ts"
+  ]
+}
