@@ -5,16 +5,12 @@
     "lib": ["dom","ESNext"],                     
     "allowJs": true,
     "outDir": "build",                          
-    "rootDir": "src",
+    "rootDir": "scripts",
     "strict": true,         
     "noImplicitAny": true,
-    "resolveJsonModule": true,
+    "moduleResolution": "node",
     "typeRoots" : ["./node_modules/@types"],
   },
   "include": [
-    "src/**/*"
-  ],
-  "exclude" : [
-    "src/**/*.spec.ts"
-  ]
+    "./scripts/*"]
 }
