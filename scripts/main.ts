@@ -38,6 +38,8 @@ $(() => {
       canvas.clientHeight,
     ];
     const indices = [3, 2, 1, 3, 1, 0];
+    canvas.width = canvas.clientWidth;
+    canvas.height = canvas.clientHeight;
 
     const initGeo = () => {
       // Create an empty buffer object to store vertex buffer
