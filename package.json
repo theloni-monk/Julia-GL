@@ -1,5 +1,5 @@
 {
-  "main": "index.js",
+  "main": "build/main.js",
   "dependencies": {
     "@types/jquery": "^3.5.5",
     "typescript": "4.2.4"
