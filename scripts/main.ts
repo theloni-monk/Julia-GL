@@ -14,11 +14,10 @@ $(() => {
     })
   ).then(() => {
     //actual script starts here
-    //TODO: get canvas to resize via webgl2 helper
+    //TODO: resize canvas onresize dom event
     const canvas: HTMLCanvasElement = document.getElementById(
       "webgl_canvas"
     ) as HTMLCanvasElement;
-
     const gl = canvas.getContext("webgl2") as WebGL2RenderingContext;
 
     /*========= init everything ===========*/
@@ -27,21 +26,25 @@ $(() => {
     var shaderProgram: WebGLProgram;
     var vertex_buffer = gl.createBuffer();
     var Index_Buffer = gl.createBuffer();
-    const vertices_pixelspace = [
-      0,
-      canvas.clientHeight,
-      0,
-      0,
-      canvas.clientWidth,
-      0,
-      canvas.clientWidth,
-      canvas.clientHeight,
-    ];
+    //quad the size of the screen to render onto
+    var vertices_pixelspace = [];
     const indices = [3, 2, 1, 3, 1, 0];
+    //TODO: supersample for MSAA antialiasing
+    //init canvas frame buffer
     canvas.width = canvas.clientWidth;
     canvas.height = canvas.clientHeight;
 
     const initGeo = () => {
+      vertices_pixelspace = [
+        0,
+        canvas.clientHeight,
+        0,
+        0,
+        canvas.clientWidth,
+        0,
+        canvas.clientWidth,
+        canvas.clientHeight,
+      ];
       // Create an empty buffer object to store vertex buffer
       // Bind appropriate array buffer to it
       gl.bindBuffer(gl.ARRAY_BUFFER, vertex_buffer);
@@ -65,10 +68,15 @@ $(() => {
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
     };
 
-    var centerX = 0;
-    var centerY = 0;
-    var invZoom = 0.5; // cant go below 1
-    
+    //TODO: on mouse hover display exit tragectory
+    //WRITEME: zoom handler
+    //WRITEME: dat.gui ui
+    var centerX = 0, centerY = 0;
+    var zoom = 1;
+    var aspect = canvas.clientWidth / canvas.clientHeight;
+    var x_min = -2, x_max = 2;
+    var y_min = x_min / aspect, y_max = x_max / aspect;
+
     /*====================== Shaders =======================*/
 
     const compileShaders = () => {
@@ -87,6 +95,16 @@ $(() => {
       gl.attachShader(shaderProgram, fragShader);
       gl.linkProgram(shaderProgram);
       gl.useProgram(shaderProgram);
+    };
+
+    const getRange = (): number[] => {
+      let x_len = x_max - x_min;
+      x_len /= zoom;
+      let y_len = x_len / aspect; //clamp to aspect ratio
+
+      x_max = centerX + x_len / 2, x_min = centerX - x_len / 2;
+      y_max = centerY + y_len / 2, y_min = centerY - y_len / 2;
+      return [x_min, y_min, x_max, y_max];
     };
 
     const linkShaders = () => {
@@ -109,32 +127,11 @@ $(() => {
         gl.canvas.height
       );
 
-      var mathSpaceRangeLocation = gl.getUniformLocation(shaderProgram, "mathSpaceRange_u");
-      let limitingPixelRangeIsWidth = Math.min(canvas.clientWidth, canvas.clientHeight) === canvas.clientWidth;
-      //math range starts at -2 to 2
-      let aspect = canvas.clientWidth / canvas.clientHeight;
-      let x_min = -2;
-      let x_max = 2;
-      let y_min = -2;
-      let y_max = 2;
-      if(limitingPixelRangeIsWidth){
-        x_min /= aspect;
-        x_max /= aspect;
-      }
-      else{
-        y_min /= aspect;
-        y_max /= aspect;
-      }
-      let x_len = x_max - x_min;
-      let y_len = y_max - y_min;
-      x_len *= invZoom;
-      y_len *= invZoom;
-      x_max = centerX + (x_len / 2);
-      x_min = centerX - (x_len / 2);
-      y_max = centerY + (y_len / 2);
-      y_min = centerY - (y_len / 2);
-      console.log(x_min,y_min,x_max,y_max)
-      gl.uniform4fv(mathSpaceRangeLocation, [x_min, y_min, x_max, y_max])
+      var mathSpaceRangeLocation = gl.getUniformLocation(
+        shaderProgram,
+        "mathSpaceRange_u"
+      );
+      gl.uniform4fv(mathSpaceRangeLocation, getRange());
     };
 
     const drawScene = () => {
@@ -147,9 +144,68 @@ $(() => {
       gl.drawElements(gl.TRIANGLES, indices.length, gl.UNSIGNED_SHORT, 0);
     };
 
-    initGeo();
+    const update = () => {
+      linkShaders();
+      drawScene();
+      //console.log('update')
+    };
+
+    
+
+    /*===== event handlers ======*/
+    $(window).on("resize", (e) => {
+      canvas.width = canvas.clientWidth;
+      canvas.height = canvas.clientHeight;
+      aspect = canvas.clientWidth / canvas.clientHeight;
+      initGeo();
+      //update();
+    });
+
+    var dragging = false;
+    var prevX: number;
+    var prevY: number;
+    // % change
+    var delX = 0, delY = 0;
+    const moveDecay = 0.95;
+    $(window).on("mousedown", (e) => {
+      dragging = true;
+      prevX = e.clientX;
+      prevY = e.clientY;
+    });
+    $(window).on("mousemove", (e) => {
+      if (dragging) {
+        delX = (e.clientX - prevX) / canvas.clientWidth;
+        delY = (e.clientY - prevY) / canvas.clientHeight;
+        prevX = e.clientX;
+        prevY = e.clientY;
+
+        let x_len = x_max - x_min;
+        let y_len = y_max - y_min;
+        centerX -= delX * x_len;
+        centerY += delY * y_len;
+      }
+    });
+    $(window).on("mouseup", (e) => (dragging = false));
+    $(window).on("mouseout", (e) => (dragging = false));
+
+    var fps;
+    var prevTime = 0;
+    const animate = (time:number) => {
+      let dt = time - prevTime;
+      fps = 1/dt;
+      if(!dragging){
+        delX *= moveDecay;
+        delY *= moveDecay;
+        let x_len = x_max - x_min, y_len = y_max - y_min;
+        centerX -= delX * x_len;
+        centerY += delY * y_len;
+      }
+      update();
+      window.requestAnimationFrame(animate);
+    }
+
     compileShaders();
-    linkShaders();
-    drawScene();
+    initGeo();
+    animate(0);
   });
 });
