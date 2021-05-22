@@ -12,9 +12,9 @@ $(() => {
     $.get("shaders/quad.vert", (data: string) => {
       vertCode = data;
     })
+    //TODO: fetch color pallet to sample from
   ).then(() => {
-    //actual script starts here
-    //TODO: resize canvas onresize dom event
+    
     const canvas: HTMLCanvasElement = document.getElementById(
       "webgl_canvas"
     ) as HTMLCanvasElement;
@@ -69,10 +69,9 @@ $(() => {
     };
 
     //TODO: on mouse hover display exit tragectory
-    //WRITEME: zoom handler
     //WRITEME: dat.gui ui
     var centerX = 0, centerY = 0;
-    var zoom = 1;
+    var xRange = 4;
     var aspect = canvas.clientWidth / canvas.clientHeight;
     var x_min = -2, x_max = 2;
     var y_min = x_min / aspect, y_max = x_max / aspect;
@@ -97,9 +96,9 @@ $(() => {
       gl.useProgram(shaderProgram);
     };
 
+    var zooming = false;
     const getRange = (): number[] => {
-      let x_len = x_max - x_min;
-      x_len /= zoom;
+      let x_len = xRange;
       let y_len = x_len / aspect; //clamp to aspect ratio
 
       x_max = centerX + x_len / 2, x_min = centerX - x_len / 2;
@@ -107,16 +106,19 @@ $(() => {
       return [x_min, y_min, x_max, y_max];
     };
 
+    
     const linkShaders = () => {
       /* ======= Associating shaders to buffer objects =======*/
       // Bind mesh data to appropriate hardcoded buffers
       gl.bindBuffer(gl.ARRAY_BUFFER, vertex_buffer);
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, Index_Buffer);
+      
       // Get the attribute location pointer and link it to js
       var coord = gl.getAttribLocation(shaderProgram, "pixel_coordinates_a");
       gl.vertexAttribPointer(coord, 2, gl.FLOAT, false, 0, 0);
       gl.enableVertexAttribArray(coord);
-
+      
+      // could optize by not re-instanciating the pointer loactions
       var resolutionUniformLocation = gl.getUniformLocation(
         shaderProgram,
         "resolution_u"
@@ -187,6 +189,13 @@ $(() => {
     });
     $(window).on("mouseup", (e) => (dragging = false));
     $(window).on("mouseout", (e) => (dragging = false));
+    
+    console.log('Press space to zoom in, b to zoom out');
+    $(window).on("keydown", (e) => {
+      e.preventDefault();
+      if(!(e.code === 'Space' || e.code === 'KeyB')) return;
+      xRange *= e.code === 'Space' ? 0.95: 1.05;
+    });
 
     var fps;
     var prevTime = 0;
