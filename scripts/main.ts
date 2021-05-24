@@ -6,25 +6,21 @@ $(() => {
   var vertCode: string;
   //wait for shaders
   $.when(
-    $.get("shaders/julia.frag", (data: string) => {
+    $.get("shaders/mandelbrot.frag", (data: string) => {
       fragCode = data;
     }),
     $.get("shaders/quad.vert", (data: string) => {
       vertCode = data;
     })
-    //TODO: fetch color pallet to sample from
   ).done(() => {
+    /*========= init everything ===========*/
     const canvas: HTMLCanvasElement = document.getElementById(
       "webgl_canvas"
     ) as HTMLCanvasElement;
     const gl = canvas.getContext("webgl2") as WebGL2RenderingContext;
-
-    /*========= init everything ===========*/
-    var vertShader: WebGLShader;
-    var fragShader: WebGLShader;
-    var shaderProgram: WebGLProgram;
-    var vertex_buffer = gl.createBuffer();
-    var Index_Buffer = gl.createBuffer();
+    const shaderProgram = gl.createProgram() as WebGLProgram;
+    const vertex_buffer = gl.createBuffer();
+    const Index_Buffer = gl.createBuffer();
     //quad the size of the screen to render onto
     var vertices_pixelspace = [];
     const indices = [3, 2, 1, 3, 1, 0];
@@ -32,6 +28,62 @@ $(() => {
     //init canvas frame buffer
     canvas.width = canvas.clientWidth;
     canvas.height = canvas.clientHeight;
+
+    var aspect = canvas.clientWidth / canvas.clientHeight;
+    
+    
+
+    //TODO: on mouse hover display exit tragectory
+    let initTex = 'assets/rainbowgrad.png';
+    //WRITEME: dat.gui ui
+    var params = {
+      centerX: (0).toFixed(5),
+      centerY: (0).toFixed(5),
+      xRange: (4).toFixed(5),
+      maxIter: 100,
+      texLoc : "assets/grad.jpg",
+      texture: loadTexture(gl, initTex)
+    }
+
+    const gui = new dat.GUI();
+    gui.useLocalStorage = true;
+    var viewport = gui.addFolder("viewport");
+    viewport.add(params, "xRange", 0.0000001, 4, 0.00001).name("zoom").listen();
+    viewport.add(params, "centerX", -2, 2, 0.0000001).name("real component").listen();
+    viewport.add(params, "centerY", -2, 2, 0.0000001).name("imaginary component").listen();
+    viewport.open();
+    var algorithm = gui.addFolder("algorithm");
+    algorithm.add(params, "maxIter",0, 2000, 1).name("iterations");
+    algorithm.open();
+    var tex = gui.addFolder("palette");
+    //TODO: give more options for preset palettes
+    tex.add(params, "texLoc").name("image url").onFinishChange(
+      (url:string)=>{
+        params.texture = loadTexture(gl, url);
+        initLink();
+      });
+    tex.open();
+
+    
+
+    /*====================== Shaders =======================*/
+
+    //compile glsl
+    function compileShaders() {
+      // Create a vertex shader object
+      const vertShader = gl.createShader(gl.VERTEX_SHADER) as WebGLShader;
+      gl.shaderSource(vertShader, vertCode);
+      gl.compileShader(vertShader);
+      // Create fragment shader object
+      const fragShader = gl.createShader(gl.FRAGMENT_SHADER) as WebGLShader;
+      gl.shaderSource(fragShader, fragCode);
+      gl.compileShader(fragShader);
+      // store the combined shader program
+      gl.attachShader(shaderProgram, vertShader);
+      gl.attachShader(shaderProgram, fragShader);
+      gl.linkProgram(shaderProgram);
+      gl.useProgram(shaderProgram);
+    }
 
     const initGeo = () => {
       vertices_pixelspace = [
@@ -67,48 +119,17 @@ $(() => {
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
     };
 
-    //TODO: on mouse hover display exit tragectory
-    //WRITEME: dat.gui ui
-    var centerX = 0,
-      centerY = 0;
-    var xRange = 4;
-    var aspect = canvas.clientWidth / canvas.clientHeight;
-    var x_min = -2,
-      x_max = 2;
-    var y_min = x_min / aspect,
-      y_max = x_max / aspect;
-    var texLoc = "assets/rainbowgrad.png";
-    var texture = loadTexture(gl, texLoc);
-
-    /*====================== Shaders =======================*/
-
-    const compileShaders = () => {
-      // Create a vertex shader object
-      vertShader = gl.createShader(gl.VERTEX_SHADER) as WebGLShader;
-      gl.shaderSource(vertShader, vertCode);
-      gl.compileShader(vertShader);
-      // Create fragment shader object
-      fragShader = gl.createShader(gl.FRAGMENT_SHADER) as WebGLShader;
-      gl.shaderSource(fragShader, fragCode);
-      gl.compileShader(fragShader);
-      // Create a shader program object to
-      // store the combined shader program
-      shaderProgram = gl.createProgram() as WebGLProgram;
-      gl.attachShader(shaderProgram, vertShader);
-      gl.attachShader(shaderProgram, fragShader);
-      gl.linkProgram(shaderProgram);
-      gl.useProgram(shaderProgram);
-    };
-
+    //get mathspace values from screenspace
     const getRange = (): number[] => {
-      let x_len = xRange;
+      let x_len = Number.parseFloat(params.xRange);
       let y_len = x_len / aspect; //clamp to aspect ratio
 
-      (x_max = centerX + x_len / 2), (x_min = centerX - x_len / 2);
-      (y_max = centerY + y_len / 2), (y_min = centerY - y_len / 2);
+      let x_max = Number.parseFloat(params.centerX) + x_len / 2, x_min = Number.parseFloat(params.centerX) - x_len / 2;
+      let y_max = Number.parseFloat(params.centerY) + y_len / 2, y_min = Number.parseFloat(params.centerY) - y_len / 2;
       return [x_min, y_min, x_max, y_max];
     };
 
+    //initial stuff like passing a texture
     const initLink = () => {
       // Bind mesh data to appropriate hardcoded buffers
       gl.bindBuffer(gl.ARRAY_BUFFER, vertex_buffer);
@@ -119,18 +140,17 @@ $(() => {
       gl.vertexAttribPointer(coord, 2, gl.FLOAT, false, 0, 0);
       gl.enableVertexAttribArray(coord);
 
-      const uSamplerLocation = gl.getUniformLocation(shaderProgram, "uSampler");
+      const uSamplerLocation = gl.getUniformLocation(shaderProgram, "sampler_u");
       gl.activeTexture(gl.TEXTURE0);
       // Bind the texture to texture unit 0
-      gl.bindTexture(gl.TEXTURE_2D, texture);
+      gl.bindTexture(gl.TEXTURE_2D, params.texture);
       // Tell the shader we bound the texture to texture unit 0
       gl.uniform1i(uSamplerLocation, 0);
     };
 
+    //stuff that is changing in js that needs to update in glsl
     const linkShaders = () => {
-      /* ======= Associating shaders to buffer objects =======*/
-
-      // could optize by not re-instanciating the pointer loactions
+      //TODO: optize by not re-instanciating the pointer loactions
       var resolutionUniformLocation = gl.getUniformLocation(
         shaderProgram,
         "resolution_u"
@@ -146,8 +166,12 @@ $(() => {
         "mathSpaceRange_u"
       );
       gl.uniform4fv(mathSpaceRangeLocation, getRange());
+
+      var maxIterLocation = gl.getUniformLocation(shaderProgram, "maxIterations_u");
+      gl.uniform1i(maxIterLocation, params.maxIter);
     };
 
+    //draw
     const drawScene = () => {
       // Clear the canvas
       gl.clearColor(1, 0.5, 1, 0.9); // clear pink
@@ -158,10 +182,10 @@ $(() => {
       gl.drawElements(gl.TRIANGLES, indices.length, gl.UNSIGNED_SHORT, 0);
     };
 
+    //relink and draw
     const update = () => {
       linkShaders();
       drawScene();
-      //console.log('update')
     };
 
     /*===== event handlers ======*/
@@ -174,12 +198,9 @@ $(() => {
     });
 
     var dragging = false;
-    var prevX: number;
-    var prevY: number;
-    // % change
-    var delX = 0,
-      delY = 0;
-    const moveDecay = 0.9;
+    var prevX: number, prevY: number;
+    var delX = 0, delY = 0; // % change
+    const moveDecay = 0.925;
     $(window).on("mousedown", (e) => {
       dragging = true;
       prevX = e.clientX;
@@ -192,10 +213,10 @@ $(() => {
         prevX = e.clientX;
         prevY = e.clientY;
 
-        let x_len = x_max - x_min;
-        let y_len = y_max - y_min;
-        centerX -= delX * x_len;
-        centerY += delY * y_len;
+        let x_len = Number.parseFloat(params.xRange);
+        let y_len = x_len/aspect;
+        params.centerX = (Number.parseFloat(params.centerX) - delX * x_len).toString();
+        params.centerY = (Number.parseFloat(params.centerY) + delY * y_len).toString();
       }
     });
     $(window).on("mouseup", (e) => (dragging = false));
@@ -203,9 +224,9 @@ $(() => {
 
     console.log("Press space to zoom in, b to zoom out");
     $(window).on("keydown", (e) => {
-      e.preventDefault();
       if (!(e.code === "Space" || e.code === "KeyB")) return;
-      xRange *= e.code === "Space" ? 0.95 : 1.05;
+      //zoom in or out 5%
+      params.xRange = (Number.parseFloat(params.xRange) * (e.code === "Space" ? 0.95 : 1.05)).toString();
     });
 
     var fps;
@@ -214,13 +235,13 @@ $(() => {
       let dt = time - prevTime;
       fps = 1 / dt;
       //makes dragging smooth
-      if (!dragging && (delX > 0.01 || delY > 0.01)) {
+      if (!dragging && (delX > 0.005 || delY > 0.005)) {
         delX *= moveDecay;
         delY *= moveDecay;
-        let x_len = x_max - x_min,
-          y_len = y_max - y_min;
-        centerX -= delX * x_len;
-        centerY += delY * y_len;
+        let x_len = Number.parseFloat(params.xRange);
+        let y_len = x_len/aspect;
+        params.centerX = (Number.parseFloat(params.centerX) - delX * x_len).toString();
+        params.centerY = (Number.parseFloat(params.centerY) + delY * y_len).toString();
       }
       update();
       window.requestAnimationFrame(animate);
@@ -234,8 +255,7 @@ $(() => {
 });
 
 // Initialize a texture and load an image.
-// When the image finished loading copy it into the texture.
-//
+// When the image finished loading copy it into the texture
 function loadTexture(gl: WebGL2RenderingContext, url: string) {
   const texture = gl.createTexture();
   gl.bindTexture(gl.TEXTURE_2D, texture);
