@@ -1,5 +1,4 @@
 #version 300 es
-//TODO: convert to vec2 and pass loc data to frag via varying
 in vec2 pixel_coordinates_a;
 // Used to pass in the resolution of the canvas
 uniform vec2 resolution_u;
