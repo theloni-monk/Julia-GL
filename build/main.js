@@ -1,6 +1,54 @@
 "use strict";
 /*========= wait for shit to load ===========*/
 const urlPrefix = "Julia-GL";
+class StateContainer {
+    constructor(initalState) {
+        this.state = initalState;
+        this.publishedWriteableGUIState = {};
+        this._buildInitialPublishedState();
+    }
+    _buildInitialPublishedState() {
+        /*
+            In order for publishedWritableGUIState to detect
+            changes, object properties will be created
+            dynamically, that is, using setters and getters.
+
+            This method initializes the publishedState object
+            with said setters and getters for all the properties
+            in this.state
+        */
+        for (let key of Object.keys(this.state)) {
+            Object.defineProperty(this.publishedWriteableGUIState, key, {
+                get: () => {
+                    // reflect internal "object" state
+                    let value = this.state[key];
+                    // turn the state value into a string
+                    let stateValueAsString = value.toString();
+                    // check if state value isn't representable as a string
+                    if (stateValueAsString === "[object Object]" && typeof value === "object") {
+                        throw new Error(`State value "${key}" cannot be represented as a string value.`);
+                    }
+                    return stateValueAsString;
+                },
+                set: (to) => {
+                    // If the published state is modified, i.e. via datGUI, reflect
+                    // the internal state in this object, trying to convert the public
+                    // (string) object to its original type.
+                    let stateObjectType = typeof this.state[key];
+                    if (stateObjectType === "number") {
+                        this.state[key] = Number.parseFloat(to);
+                    }
+                    else if (stateObjectType === "boolean") {
+                        this.state[key] = to === "true" ? true : false;
+                    }
+                    else {
+                        this.state[key] = to;
+                    }
+                },
+            });
+        }
+    }
+}
 //wait for dom
 $(() => {
     var fragCode;
@@ -26,40 +74,44 @@ $(() => {
         canvas.height = canvas.clientHeight;
         var aspect = canvas.clientWidth / canvas.clientHeight;
         //TODO: on mouse hover display exit tragectory
-        let initTex = 'assets/grad.jpg';
-        var params = {
-            centerX: (0).toFixed(5),
-            centerY: (0).toFixed(5),
-            julR: (0).toFixed(5),
-            julI: (0).toFixed(5),
-            xRange: (4).toFixed(5),
+        let initTex = "assets/grad.jpg";
+        let appState = new StateContainer({
+            centerX: 0,
+            centerY: 0,
+            julR: 0,
+            julI: 0,
+            xRange: 4,
             maxIter: 100,
             texLoc: "assets/grad.jpg",
             texture: loadTexture(gl, initTex),
-            fps: '60'
-        };
+            fps: "60",
+        });
+        window.state = appState;
+        // INIT GUI
         const gui = new dat.GUI();
         gui.useLocalStorage = true;
         gui.addFolder("Spacebar to zoom in or B key to zoom out");
-        gui.add(params, "fps").name("fps (readonly)").listen();
+        gui.add(appState.publishedWriteableGUIState, "fps").name("fps (readonly)").listen();
         var viewport = gui.addFolder("viewport");
-        viewport.add(params, "xRange").name("zoom").listen();
-        viewport.add(params, "centerX").name("real component").listen();
-        viewport.add(params, "centerY").name("imaginary component").listen();
+        viewport.add(appState.publishedWriteableGUIState, "xRange").name("zoom").listen();
+        viewport.add(appState.publishedWriteableGUIState, "centerX").name("real component").listen();
+        viewport.add(appState.publishedWriteableGUIState, "centerY").name("imaginary component").listen();
         viewport.open();
         var algorithm = gui.addFolder("algorithm");
-        algorithm.add(params, "maxIter", 0, 2000, 1).name("iterations");
+        algorithm.add(appState.publishedWriteableGUIState, "maxIter", 0, 2000, 1).name("iterations");
         algorithm.open();
         var tex = gui.addFolder("palette");
         //TODO: give more options for preset palettes
-        tex.add(params, "texLoc").name("image url").onFinishChange((url) => {
-            params.texture = loadTexture(gl, url);
+        tex.add(appState.publishedWriteableGUIState, "texLoc")
+            .name("image url")
+            .onFinishChange((url) => {
+            appState.state.texture = loadTexture(gl, url);
             initLink();
         });
         tex.open();
         var julia = gui.addFolder("julia set point (leave blank for mandelbrot set)");
-        julia.add(params, "julR").name("real component");
-        julia.add(params, "julI").name("imaginary component");
+        julia.add(appState.publishedWriteableGUIState, "julR").name("real component");
+        julia.add(appState.publishedWriteableGUIState, "julI").name("imaginary component");
         /*====================== Shaders =======================*/
         //compile glsl
         function compileShaders() {
@@ -105,10 +157,10 @@ $(() => {
         };
         //get mathspace values from screenspace
         const getRange = () => {
-            let x_len = Number.parseFloat(params.xRange);
+            let x_len = appState.state.xRange;
             let y_len = x_len / aspect; //clamp to aspect ratio
-            let x_max = Number.parseFloat(params.centerX) + x_len / 2, x_min = Number.parseFloat(params.centerX) - x_len / 2;
-            let y_max = Number.parseFloat(params.centerY) + y_len / 2, y_min = Number.parseFloat(params.centerY) - y_len / 2;
+            let x_max = appState.state.centerX + x_len / 2, x_min = appState.state.centerX - x_len / 2;
+            let y_max = appState.state.centerY + y_len / 2, y_min = appState.state.centerY - y_len / 2;
             return [x_min, y_min, x_max, y_max];
         };
         //initial stuff like passing a texture
@@ -123,7 +175,7 @@ $(() => {
             const uSamplerLocation = gl.getUniformLocation(shaderProgram, "sampler_u");
             gl.activeTexture(gl.TEXTURE0);
             // Bind the texture to texture unit 0
-            gl.bindTexture(gl.TEXTURE_2D, params.texture);
+            gl.bindTexture(gl.TEXTURE_2D, appState.state.texture);
             // Tell the shader we bound the texture to texture unit 0
             gl.uniform1i(uSamplerLocation, 0);
         };
@@ -135,9 +187,9 @@ $(() => {
             var mathSpaceRangeLocation = gl.getUniformLocation(shaderProgram, "mathSpaceRange_u");
             gl.uniform4fv(mathSpaceRangeLocation, getRange());
             var maxIterLocation = gl.getUniformLocation(shaderProgram, "maxIterations_u");
-            gl.uniform1i(maxIterLocation, params.maxIter);
+            gl.uniform1i(maxIterLocation, appState.state.maxIter);
             var julLocation = gl.getUniformLocation(shaderProgram, "julPoint_u");
-            gl.uniform2fv(julLocation, [Number.parseFloat(params.julR), Number.parseFloat(params.julI)]);
+            gl.uniform2fv(julLocation, [appState.state.julR, appState.state.julI]);
         };
         //draw
         const drawScene = () => {
@@ -177,10 +229,10 @@ $(() => {
                 delY = (e.clientY - prevY) / canvas.clientHeight;
                 prevX = e.clientX;
                 prevY = e.clientY;
-                let x_len = Number.parseFloat(params.xRange);
+                let x_len = appState.state.xRange;
                 let y_len = x_len / aspect;
-                params.centerX = (Number.parseFloat(params.centerX) - delX * x_len).toString();
-                params.centerY = (Number.parseFloat(params.centerY) + delY * y_len).toString();
+                appState.state.centerX = appState.state.centerX - delX * x_len;
+                appState.state.centerY = appState.state.centerY + delY * y_len;
             }
         });
         $(window).on("mouseup", (e) => (dragging = false));
@@ -190,21 +242,30 @@ $(() => {
             if (!(e.code === "Space" || e.code === "KeyB"))
                 return;
             //zoom in or out 5%
-            params.xRange = (Number.parseFloat(params.xRange) * (e.code === "Space" ? 0.95 : 1.05)).toString();
+            zoomWindow(e.code === "Space" ? 0.95 : 1.05);
+        });
+        function zoomWindow(factor) {
+            appState.state.xRange = appState.state.xRange * factor;
+        }
+        // init scroll zoom
+        document.addEventListener("wheel", (e) => {
+            zoomWindow(e.deltaY > 0 ? 0.955 : 1.055);
         });
         var prevTime = 0;
         const animate = (time) => {
             let dt = time - prevTime;
-            params.fps = (1000 / dt).toFixed(0);
+            appState.state.fps = (1000 / dt).toFixed(0);
             prevTime = time;
             //makes dragging smooth
             if (!dragging && (delX > 0.005 || delY > 0.005)) {
                 delX *= moveDecay;
                 delY *= moveDecay;
-                let x_len = Number.parseFloat(params.xRange);
+                let x_len = appState.state.xRange;
                 let y_len = x_len / aspect;
-                params.centerX = (Number.parseFloat(params.centerX) - delX * x_len).toString();
-                params.centerY = (Number.parseFloat(params.centerY) + delY * y_len).toString();
+                let newX = appState.state.centerX - delX * x_len;
+                let newY = appState.state.centerY + delY * y_len;
+                appState.state.centerX = newX;
+                appState.state.centerY = newY;
             }
             update();
             window.requestAnimationFrame(animate);
