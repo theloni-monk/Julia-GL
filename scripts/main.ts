@@ -1,18 +1,19 @@
 /*========= wait for shit to load ===========*/
-
+const urlPrefix = "Julia-GL";
 //wait for dom
 $(() => {
   var fragCode: string;
   var vertCode: string;
   //wait for shaders
   $.when(
-    $.get("shaders/mandelbrot.frag", (data: string) => {
+    $.get("shaders/fractal.frag", (data: string) => {
       fragCode = data;
     }),
     $.get("shaders/quad.vert", (data: string) => {
       vertCode = data;
     })
   ).done(() => {
+
     /*========= init everything ===========*/
     const canvas: HTMLCanvasElement = document.getElementById(
       "webgl_canvas"
@@ -28,29 +29,30 @@ $(() => {
     //init canvas frame buffer
     canvas.width = canvas.clientWidth;
     canvas.height = canvas.clientHeight;
-
     var aspect = canvas.clientWidth / canvas.clientHeight;
-    
-    
 
     //TODO: on mouse hover display exit tragectory
-    let initTex = 'assets/rainbowgrad.png';
-    //WRITEME: dat.gui ui
+    let initTex = 'assets/grad.jpg';
     var params = {
       centerX: (0).toFixed(5),
       centerY: (0).toFixed(5),
+      julR: (0).toFixed(5),
+      julI: (0).toFixed(5),
       xRange: (4).toFixed(5),
       maxIter: 100,
       texLoc : "assets/grad.jpg",
-      texture: loadTexture(gl, initTex)
+      texture: loadTexture(gl, initTex),
+      fps: '60'
     }
 
     const gui = new dat.GUI();
     gui.useLocalStorage = true;
+    gui.addFolder("Spacebar to zoom in or B key to zoom out");
+    gui.add(params, "fps").name("fps (readonly)").listen();
     var viewport = gui.addFolder("viewport");
-    viewport.add(params, "xRange", 0.0000001, 4, 0.00001).name("zoom").listen();
-    viewport.add(params, "centerX", -2, 2, 0.0000001).name("real component").listen();
-    viewport.add(params, "centerY", -2, 2, 0.0000001).name("imaginary component").listen();
+    viewport.add(params, "xRange").name("zoom").listen();
+    viewport.add(params, "centerX").name("real component").listen();
+    viewport.add(params, "centerY").name("imaginary component").listen();
     viewport.open();
     var algorithm = gui.addFolder("algorithm");
     algorithm.add(params, "maxIter",0, 2000, 1).name("iterations");
@@ -63,8 +65,10 @@ $(() => {
         initLink();
       });
     tex.open();
+    var julia = gui.addFolder("julia set point (leave blank for mandelbrot set)");
+    julia.add(params, "julR").name("real component");
+    julia.add(params, "julI").name("imaginary component");
 
-    
 
     /*====================== Shaders =======================*/
 
@@ -85,6 +89,7 @@ $(() => {
       gl.useProgram(shaderProgram);
     }
 
+    //make quad
     const initGeo = () => {
       vertices_pixelspace = [
         0,
@@ -148,7 +153,7 @@ $(() => {
       gl.uniform1i(uSamplerLocation, 0);
     };
 
-    //stuff that is changing in js that needs to update in glsl
+    //stuff that is changing in js every frame that needs to update in glsl
     const linkShaders = () => {
       //TODO: optize by not re-instanciating the pointer loactions
       var resolutionUniformLocation = gl.getUniformLocation(
@@ -169,6 +174,9 @@ $(() => {
 
       var maxIterLocation = gl.getUniformLocation(shaderProgram, "maxIterations_u");
       gl.uniform1i(maxIterLocation, params.maxIter);
+
+      var julLocation = gl.getUniformLocation(shaderProgram, "julPoint_u");
+      gl.uniform2fv(julLocation, [Number.parseFloat(params.julR), Number.parseFloat(params.julI)]);
     };
 
     //draw
@@ -229,11 +237,11 @@ $(() => {
       params.xRange = (Number.parseFloat(params.xRange) * (e.code === "Space" ? 0.95 : 1.05)).toString();
     });
 
-    var fps;
     var prevTime = 0;
     const animate = (time: number) => {
       let dt = time - prevTime;
-      fps = 1 / dt;
+      params.fps = (1000/dt).toFixed(0);
+      prevTime = time;
       //makes dragging smooth
       if (!dragging && (delX > 0.005 || delY > 0.005)) {
         delX *= moveDecay;
