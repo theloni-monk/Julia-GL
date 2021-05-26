@@ -31,6 +31,7 @@ int iterate(mat2 initPoint) {
     return count;
 }
 
+const float iterations_per_tex = 100.0; //could export to dat.gui maybe
 //note: clip space is -1 to +1
 void main(void) {
     vec2 strechedClipLoc = vec2((clipLoc.x + 1.0) / 2.0, (clipLoc.y + 1.0) / 2.0);
@@ -38,10 +39,18 @@ void main(void) {
     float x_len = mathSpaceRange_u.z - mathSpaceRange_u.x;
     //TODO: increase float precision by emulating double when nec maybe?
     vec2 realPos = vec2(mathSpaceRange_u.x + (strechedClipLoc.x * x_len), mathSpaceRange_u.y + (strechedClipLoc.y * y_len));
-    float escapeVel = float(iterate(getComplex(realPos))) / float(maxIterations_u);
-    if(escapeVel > 0.99) { //if goes to maxiter make it black
-        outColor = vec4(0, 0, 0, 1);
-    } else {
-        outColor = texture(sampler_u, vec2(escapeVel, 0.0));
+    
+    //if len over 2 just return base of tex and dont compute
+    if(length(realPos) > 2.0){
+        outColor = texture(sampler_u, vec2(0, 0));
+        return;
     }
+
+    float escapeVel = mod(float(iterate(getComplex(realPos))), iterations_per_tex) / iterations_per_tex;
+    if(escapeVel == 0.0) { //hit maxiter
+        outColor = vec4(0, 0, 0, 1);
+        return;
+    }
+    outColor = texture(sampler_u, vec2(escapeVel, 0));
+    
 }
