@@ -143,7 +143,7 @@ $(() => {
         const linkShaders = () => {
             gl.uniform2f(pointers.uResLoc, gl.canvas.width, gl.canvas.height);
             gl.uniform4fv(pointers.uMathSpaceLoc, getRange());
-            gl.uniform1i(pointers.uMaxIterLoc, appState.state.maxIter);
+            gl.uniform1ui(pointers.uMaxIterLoc, appState.state.maxIter);
             gl.uniform2f(pointers.uJulLoc, appState.state.julR, appState.state.julI);
         };
         //draw

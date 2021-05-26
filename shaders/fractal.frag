@@ -5,7 +5,7 @@ in vec2 clipLoc;
 uniform vec4 mathSpaceRange_u;
 uniform vec2 julPoint_u; //render julia set if point provided
 uniform sampler2D sampler_u;
-uniform int maxIterations_u;
+uniform uint maxIterations_u;
 
 out vec4 outColor; //TODO: implement smooth coloring algoritim
 
@@ -18,8 +18,8 @@ float getComplexLen(mat2 complex) {
 }
 
 //see how long it takes to escape
-int iterate(mat2 initPoint) {
-    int count = 0;
+uint iterate(mat2 initPoint) {
+    uint count = uint(0);
     mat2 iterator = mat2(initPoint); // deep copy
     bool doMandelbrot = length(julPoint_u) < 0.001;
     mat2 jul = getComplex(julPoint_u);
@@ -31,7 +31,7 @@ int iterate(mat2 initPoint) {
     return count;
 }
 
-const float iterations_per_tex = 100.0; //could export to dat.gui maybe
+const float iterations_per_tex = 200.0; //could export to dat.gui maybe
 //note: clip space is -1 to +1
 void main(void) {
     vec2 strechedClipLoc = vec2((clipLoc.x + 1.0) / 2.0, (clipLoc.y + 1.0) / 2.0);
@@ -46,11 +46,13 @@ void main(void) {
         return;
     }
 
-    float escapeVel = mod(float(iterate(getComplex(realPos))), iterations_per_tex) / iterations_per_tex;
-    if(escapeVel == 0.0) { //hit maxiter
+    uint iterations = iterate(getComplex(realPos));
+    if(iterations == maxIterations_u) { //hit maxiter
         outColor = vec4(0, 0, 0, 1);
         return;
     }
+
+    float escapeVel = mod(float(iterations), iterations_per_tex) / iterations_per_tex;
     outColor = texture(sampler_u, vec2(escapeVel, 0));
     
 }
