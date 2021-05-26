@@ -12,55 +12,53 @@ interface IAppState extends Record<string, any> {
     texture: WebGLTexture | null;
 }
 
+interface gl_pointers{
+  aVertCoordsLoc: number, //attribute pointer
+  //uniform pointers
+  uSamplerLoc: WebGLUniformLocation | null,
+  uResLoc: WebGLUniformLocation | null,
+  uMathSpaceLoc: WebGLUniformLocation | null,
+  uMaxIterLoc: WebGLUniformLocation | null,
+  uJulLoc: WebGLUniformLocation | null
+}
+
 class StateContainer {
     state: IAppState;
-
     // This object will be passed to datGUI
     // It mirrors the internal state of this StateContainer,
     // and any changes made to it will be reflected bidirectionallly
-    // if possible.
-    publishedWriteableGUIState: { [name: string]: string };
+    guiState: { [name: string]: string | number };
 
     constructor(initalState: IAppState) {
         this.state = initalState;
-        this.publishedWriteableGUIState = {};
+        this.guiState = {};
         this._buildInitialPublishedState();
     }
 
+    //init state
     _buildInitialPublishedState() {
         /*
             In order for publishedWritableGUIState to detect
             changes, object properties will be created
             dynamically, that is, using setters and getters.
-
-            This method initializes the publishedState object
-            with said setters and getters for all the properties
-            in this.state
         */
-
         for (let key of Object.keys(this.state)) {
-            Object.defineProperty(this.publishedWriteableGUIState, key, {
+            Object.defineProperty(this.guiState, key, {
                 get: () => {
                     // reflect internal "object" state
-
                     let value = this.state[key];
-
                     // turn the state value into a string
-
                     let stateValueAsString = value.toString();
-
                     // check if state value isn't representable as a string
                     if (stateValueAsString === "[object Object]" && typeof value === "object") {
                         throw new Error(`State value "${key}" cannot be represented as a string value.`);
                     }
-
                     return stateValueAsString;
                 },
                 set: (to: any) => {
                     // If the published state is modified, i.e. via datGUI, reflect
                     // the internal state in this object, trying to convert the public
                     // (string) object to its original type.
-
                     let stateObjectType = typeof this.state[key];
 
                     if (stateObjectType === "number") {
@@ -74,15 +72,8 @@ class StateContainer {
             });
         }
     }
-
-    // _rebuildPublishedState() {
-    //     for (let key of Object.keys(this.state)) {
-    //         let value = this.state[key];
-
-    //         this.publishedWriteableGUIState[key] = {};
-    //     }
-    // }
 }
+
 
 //wait for dom
 $(() => {
@@ -103,6 +94,14 @@ $(() => {
         const shaderProgram = gl.createProgram() as WebGLProgram;
         const vertex_buffer = gl.createBuffer();
         const Index_Buffer = gl.createBuffer();
+        const pointers:gl_pointers ={
+            aVertCoordsLoc: 0,
+            uSamplerLoc: null,
+            uResLoc: null,
+            uMathSpaceLoc: null,
+            uMaxIterLoc: null,
+            uJulLoc:null
+        }
         //quad the size of the screen to render onto
         var vertices_pixelspace = [];
         const indices = [3, 2, 1, 3, 1, 0];
@@ -115,37 +114,35 @@ $(() => {
         //TODO: on mouse hover display exit tragectory
         let initTex = "assets/grad.jpg";
 
-        let appState = new StateContainer({
+        const appState = new StateContainer({
             centerX: 0,
             centerY: 0,
             julR: 0,
             julI: 0,
             xRange: 4,
             maxIter: 100,
-            texLoc: "assets/grad.jpg",
+            texLoc: initTex,
             texture: loadTexture(gl, initTex),
-            fps: "60",
+            fps: 60
         });
-
         (window as any).state = appState;
 
         // INIT GUI
-
         const gui = new dat.GUI();
         gui.useLocalStorage = true;
         gui.addFolder("Spacebar to zoom in or B key to zoom out");
-        gui.add(appState.publishedWriteableGUIState, "fps").name("fps (readonly)").listen();
+        gui.add(appState.guiState, "fps").name("fps (readonly)").listen();
         var viewport = gui.addFolder("viewport");
-        viewport.add(appState.publishedWriteableGUIState, "xRange").name("zoom").listen();
-        viewport.add(appState.publishedWriteableGUIState, "centerX").name("real component").listen();
-        viewport.add(appState.publishedWriteableGUIState, "centerY").name("imaginary component").listen();
+        viewport.add(appState.guiState, "xRange").name("zoom").listen();
+        viewport.add(appState.guiState, "centerX").name("real component").listen();
+        viewport.add(appState.guiState, "centerY").name("imaginary component").listen();
         viewport.open();
         var algorithm = gui.addFolder("algorithm");
-        algorithm.add(appState.publishedWriteableGUIState, "maxIter", 0, 2000, 1).name("iterations");
+        algorithm.add(appState.guiState, "maxIter", 0, 2000, 1).name("iterations");
         algorithm.open();
         var tex = gui.addFolder("palette");
         //TODO: give more options for preset palettes
-        tex.add(appState.publishedWriteableGUIState, "texLoc")
+        tex.add(appState.guiState, "texLoc")
             .name("image url")
             .onFinishChange((url: string) => {
                 appState.state.texture = loadTexture(gl, url);
@@ -153,8 +150,8 @@ $(() => {
             });
         tex.open();
         var julia = gui.addFolder("julia set point (leave blank for mandelbrot set)");
-        julia.add(appState.publishedWriteableGUIState, "julR").name("real component");
-        julia.add(appState.publishedWriteableGUIState, "julI").name("imaginary component");
+        julia.add(appState.guiState, "julR").name("real component");
+        julia.add(appState.guiState, "julI").name("imaginary component");
 
         /*====================== Shaders =======================*/
 
@@ -221,32 +218,32 @@ $(() => {
             gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, Index_Buffer);
 
             // Get the attribute location pointer and link it to js
-            const coord = gl.getAttribLocation(shaderProgram, "pixel_coordinates_a");
-            gl.vertexAttribPointer(coord, 2, gl.FLOAT, false, 0, 0);
-            gl.enableVertexAttribArray(coord);
+            pointers.aVertCoordsLoc = gl.getAttribLocation(shaderProgram, "pixel_coordinates_a");
+            gl.vertexAttribPointer(pointers.aVertCoordsLoc, 2, gl.FLOAT, false, 0, 0);
+            gl.enableVertexAttribArray(pointers.aVertCoordsLoc);
 
-            const uSamplerLocation = gl.getUniformLocation(shaderProgram, "sampler_u");
+            pointers.uSamplerLoc = gl.getUniformLocation(shaderProgram, "sampler_u") as WebGLUniformLocation;
             gl.activeTexture(gl.TEXTURE0);
             // Bind the texture to texture unit 0
             gl.bindTexture(gl.TEXTURE_2D, appState.state.texture);
             // Tell the shader we bound the texture to texture unit 0
-            gl.uniform1i(uSamplerLocation, 0);
+            gl.uniform1i(pointers.uSamplerLoc, 0);
         };
 
         //stuff that is changing in js every frame that needs to update in glsl
         const linkShaders = () => {
-            //TODO: optize by not re-instanciating the pointer loactions
-            var resolutionUniformLocation = gl.getUniformLocation(shaderProgram, "resolution_u");
-            gl.uniform2f(resolutionUniformLocation, gl.canvas.width, gl.canvas.height);
+            //NOTE: tbh not sure if we have to update pointers but i guess they could be dynamically allocated so its good to just in case
+            pointers.uResLoc = gl.getUniformLocation(shaderProgram, "resolution_u") as WebGLUniformLocation;
+            gl.uniform2f(pointers.uResLoc, gl.canvas.width, gl.canvas.height);
 
-            var mathSpaceRangeLocation = gl.getUniformLocation(shaderProgram, "mathSpaceRange_u");
-            gl.uniform4fv(mathSpaceRangeLocation, getRange());
+            pointers.uMathSpaceLoc = gl.getUniformLocation(shaderProgram, "mathSpaceRange_u") as WebGLUniformLocation;
+            gl.uniform4fv(pointers.uMathSpaceLoc, getRange());
 
-            var maxIterLocation = gl.getUniformLocation(shaderProgram, "maxIterations_u");
-            gl.uniform1i(maxIterLocation, appState.state.maxIter);
+            pointers.uMaxIterLoc = gl.getUniformLocation(shaderProgram, "maxIterations_u") as WebGLUniformLocation;
+            gl.uniform1i(pointers.uMaxIterLoc, appState.state.maxIter);
 
-            var julLocation = gl.getUniformLocation(shaderProgram, "julPoint_u");
-            gl.uniform2fv(julLocation, [appState.state.julR, appState.state.julI]);
+            pointers.uJulLoc = gl.getUniformLocation(shaderProgram, "julPoint_u") as WebGLUniformLocation;
+            gl.uniform2f(pointers.uJulLoc, appState.state.julR, appState.state.julI);
         };
 
         //draw
