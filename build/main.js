@@ -49,7 +49,7 @@ $(() => {
         // INIT GUI
         const gui = new dat.GUI();
         gui.useLocalStorage = true;
-        gui.addFolder("Spacebar to zoom in or B key to zoom out");
+        gui.addFolder("Scroll to zoom or use Spacebar to zoom in and B key to zoom out");
         gui.add(appState.guiState, "fps").name("fps (readonly)").listen();
         var viewport = gui.addFolder("viewport");
         viewport.add(appState.guiState, "xRange").name("zoom").listen();
@@ -91,14 +91,10 @@ $(() => {
         //make quad
         const initGeo = () => {
             vertices_pixelspace = [
-                0,
-                canvas.clientHeight,
-                0,
-                0,
-                canvas.clientWidth,
-                0,
-                canvas.clientWidth,
-                canvas.clientHeight,
+                0, canvas.clientHeight,
+                0, 0,
+                canvas.clientWidth, 0,
+                canvas.clientWidth, canvas.clientHeight,
             ];
             // Create an empty buffer object to store vertex buffer
             // Bind appropriate array buffer to it
@@ -127,11 +123,16 @@ $(() => {
             // Bind mesh data to appropriate hardcoded buffers
             gl.bindBuffer(gl.ARRAY_BUFFER, vertex_buffer);
             gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, Index_Buffer);
-            // Get the attribute location pointer and link it to js
+            //set pointers
             pointers.aVertCoordsLoc = gl.getAttribLocation(shaderProgram, "pixel_coordinates_a");
+            pointers.uSamplerLoc = gl.getUniformLocation(shaderProgram, "sampler_u");
+            pointers.uResLoc = gl.getUniformLocation(shaderProgram, "resolution_u");
+            pointers.uMathSpaceLoc = gl.getUniformLocation(shaderProgram, "mathSpaceRange_u");
+            pointers.uMaxIterLoc = gl.getUniformLocation(shaderProgram, "maxIterations_u");
+            pointers.uJulLoc = gl.getUniformLocation(shaderProgram, "julPoint_u");
+            // Get the attribute location pointer and link it to js
             gl.vertexAttribPointer(pointers.aVertCoordsLoc, 2, gl.FLOAT, false, 0, 0);
             gl.enableVertexAttribArray(pointers.aVertCoordsLoc);
-            pointers.uSamplerLoc = gl.getUniformLocation(shaderProgram, "sampler_u");
             gl.activeTexture(gl.TEXTURE0);
             // Bind the texture to texture unit 0
             gl.bindTexture(gl.TEXTURE_2D, appState.state.texture);
@@ -140,14 +141,9 @@ $(() => {
         };
         //stuff that is changing in js every frame that needs to update in glsl
         const linkShaders = () => {
-            //NOTE: tbh not sure if we have to update pointers but i guess they could be dynamically allocated so its good to just in case
-            pointers.uResLoc = gl.getUniformLocation(shaderProgram, "resolution_u");
             gl.uniform2f(pointers.uResLoc, gl.canvas.width, gl.canvas.height);
-            pointers.uMathSpaceLoc = gl.getUniformLocation(shaderProgram, "mathSpaceRange_u");
             gl.uniform4fv(pointers.uMathSpaceLoc, getRange());
-            pointers.uMaxIterLoc = gl.getUniformLocation(shaderProgram, "maxIterations_u");
             gl.uniform1i(pointers.uMaxIterLoc, appState.state.maxIter);
-            pointers.uJulLoc = gl.getUniformLocation(shaderProgram, "julPoint_u");
             gl.uniform2f(pointers.uJulLoc, appState.state.julR, appState.state.julI);
         };
         //draw
@@ -176,7 +172,6 @@ $(() => {
         var dragging = false;
         var prevX, prevY;
         var delX = 0, delY = 0; // % change
-        const moveDecay = 0.925;
         $(window).on("mousedown", (e) => {
             dragging = true;
             prevX = e.clientX;
@@ -196,28 +191,34 @@ $(() => {
         });
         $(window).on("mouseup", (e) => (dragging = false));
         $(window).on("mouseout", (e) => (dragging = false));
-        console.log("Press space to zoom in, b to zoom out");
+        const zoomWindow = (factor) => appState.state.xRange = appState.state.xRange * factor;
         $(window).on("keydown", (e) => {
             if (!(e.code === "Space" || e.code === "KeyB"))
                 return;
             //zoom in or out 5%
             zoomWindow(e.code === "Space" ? 0.95 : 1.05);
         });
-        function zoomWindow(factor) {
-            appState.state.xRange = appState.state.xRange * factor;
-        }
-        // init scroll zoom
+        //scroll zoom
+        const zoomSlow = 0.05;
         document.addEventListener("wheel", (e) => {
             zoomWindow(e.deltaY > 0 ? 0.955 : 1.055);
-            //TODO: zoom towards cursor
+            //zoom towards cursor
+            let pixelCenterX = canvas.clientWidth / 2;
+            let pixelCenterY = canvas.clientHeight / 2;
+            let dx = -zoomSlow * appState.state.xRange * (e.clientX - pixelCenterX) / pixelCenterX;
+            let dy = -zoomSlow * (appState.state.xRange / aspect) * (e.clientY - pixelCenterY) / pixelCenterY;
+            console.log(pixelCenterX, pixelCenterY, e.clientX, e.clientY, delX, delY);
+            appState.state.centerX -= dx;
+            appState.state.centerY += dy;
         });
         var prevTime = 0;
+        const moveDecay = 0.925;
         const animate = (time) => {
             let dt = time - prevTime;
             appState.state.fps = (1000 / dt).toFixed(0);
             prevTime = time;
             //makes dragging smooth
-            if (!dragging && (delX > 0.005 || delY > 0.005)) {
+            if (!dragging && (delX > 0.0005 || delY > 0.0005)) {
                 delX *= moveDecay;
                 delY *= moveDecay;
                 let x_len = appState.state.xRange;
@@ -226,6 +227,7 @@ $(() => {
                 let newY = appState.state.centerY + delY * y_len;
                 appState.state.centerX = newX;
                 appState.state.centerY = newY;
+                console.log(delX, delY, newX, newY);
             }
             update();
             window.requestAnimationFrame(animate);
