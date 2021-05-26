@@ -232,7 +232,6 @@ $(() => {
             let pixelCenterY = canvas.clientHeight/2;
             let dx = -zoomSlow * appState.state.xRange * (e.clientX - pixelCenterX) / pixelCenterX;
             let dy = -zoomSlow * (appState.state.xRange / aspect) *(e.clientY - pixelCenterY) / pixelCenterY;
-            console.log(pixelCenterX, pixelCenterY, e.clientX, e.clientY, delX, delY)
             appState.state.centerX -= dx;
             appState.state.centerY += dy;
         });
@@ -253,7 +252,6 @@ $(() => {
                 let newY = appState.state.centerY + delY * y_len;
                 appState.state.centerX = newX;
                 appState.state.centerY = newY;
-                console.log(delX,delY, newX, newY)
             }
             update();
             window.requestAnimationFrame(animate);
