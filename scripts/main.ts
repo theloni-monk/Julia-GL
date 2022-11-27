@@ -5,7 +5,7 @@ $(() => {
     var vertCode: string;
     //wait for shaders
     $.when(
-        $.get("shaders/fractal.frag", (data: string) => {
+        $.get("shaders/log_fractal.frag", (data: string) => {
             fragCode = data;
         }),
         $.get("shaders/quad.vert", (data: string) => {
