@@ -59,20 +59,15 @@ void main(void) {
     float log_y_len = log(mathSpaceRange_u.w - mathSpaceRange_u.y);
     float log_x_len = log(mathSpaceRange_u.z - mathSpaceRange_u.x);
     
-    //FIXME: math
+    
     vec2 log_pos = vec2(
     logaddexp(log(mathSpaceRange_u.x) , log(strechedClipLoc.x) + log_x_len),
     logaddexp(log(mathSpaceRange_u.y), log(strechedClipLoc.y) + log_y_len)
     );
     
-    float y_len = mathSpaceRange_u.w - mathSpaceRange_u.y;
-    float x_len = mathSpaceRange_u.z - mathSpaceRange_u.x;
-    vec2 pos = vec2(mathSpaceRange_u.x + (strechedClipLoc.x * x_len), mathSpaceRange_u.y + (strechedClipLoc.y * y_len));
-    //log_pos = log(pos);
-
 
     //if len over 2 just return base of tex and dont compute
-    if(length(exp(log_pos)) > 2.0){
+    if(pow(exp(log_pos.x), 2.0) + pow(exp(log_pos.y), 4.0) > 4.0){
         outColor = vec4(length(exp(log_pos)),0,0,1);//texture(sampler_u, vec2(0, 0));
         return;
     }

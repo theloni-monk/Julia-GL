@@ -1,5 +1,5 @@
 #version 300 es
-precision highp float; //TODO: implement log-domain operations, current maxzoom:0.00003
+precision highp float; //TODO: implement vec3 operations, with 3rd element being exponent current maxzoom:0.00003
 
 in vec2 clipLoc;
 uniform vec4 mathSpaceRange_u;
@@ -13,29 +13,17 @@ float logaddexp(float a, float b){
     return log(exp(a)+exp(b));
 }
 
-//WRITEME: cpx log
-//vec2 cpx_log(){}
-
-//WRITEME: complex logarithm
-vec2 cpx_logaddexp(vec2 a, vec2 b){ // log domain addition
-    return vec2(
-        logaddexp(a.x, b.x), 
-        logaddexp(a.y, b.y)
-        );
+//use matrix representation of a complex number
+mat2 getComplex(vec2 v) {
+    return mat2(v.x, v.y, -v.y, v.x);
+}
+float getComplexLen(mat2 complex) {
+    return length(vec2(complex[0][0], complex[0, 1]));
 }
 
-//WRITEME: cpx multiplication in log domain
-vec2 cpx_mult_log(vec2 log_a, vec2 log_b){
-    //a.x*b.x - a.y*b.y
-    float real = logaddexp(log_a.x+log_b.x, -(log_a.y+log_b.y));
-    //a.y*b.x + a.x*b.y
-    float imag = logaddexp((log_a.y+log_b.x),(log_a.x+log_b.y));
-    return vec2(real, imag);
-}
 
 //see how long it takes to escape
-//WRITEME: convert to log domainuint 
-iterate(mat2 initPoint) {
+uint iterate(mat2 initPoint) {
     uint count = uint(0);
     mat2 iterator = mat2(initPoint); // deep copy
     bool doMandelbrot = length(julPoint_u) < 0.0001;
@@ -71,7 +59,7 @@ void main(void) {
         return;
     }
 
-    uint iterations = iterate(pos);
+    uint iterations = iterate(getComplex(pos));
     if(iterations == maxIterations_u) { //hit maxiter
         outColor = vec4(0, 0, 0, 1);
         return;
